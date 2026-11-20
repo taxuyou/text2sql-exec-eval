@@ -82,6 +82,15 @@ Markdown report written to report.md
 
 </details>
 
+## 웹 화면으로 보기
+
+```bash
+python -m t2s_eval.web --db demo/shop.sqlite --pairs demo/pairs.jsonl   # http://127.0.0.1:8000
+```
+
+데모 질문을 고르거나 SQL을 고친 뒤 `실행해서 채점`을 누르면, 같은 채점기가 낸 판정·절 태그와
+두 SQL의 실행 결과 표가 나란히 나오고 한쪽 결과에만 있는 행이 붉게 표시됩니다.
+
 ## 왜 실행 결과로 평가하나
 
 같은 질문에 대한 올바른 SQL은 여러 형태로 쓸 수 있습니다. 데모의 `q03`:
@@ -264,11 +273,13 @@ t2s_eval/
   evaluator.py   JSONL 로드, 쌍별 평가, 집계
   report.py      콘솔 요약, Markdown 리포트
   cli.py         python -m t2s_eval
+  web.py         python -m t2s_eval.web (http.server + static/index.html 한 장)
 demo/
   build_shop_db.py   합성 쇼핑몰 DB 생성 (5개 테이블, 결정적 시드)
   pairs.jsonl        질문·gold·pred 14쌍
   sample_report.md   위 데모의 전체 리포트
-tests/               비교 규칙, 각 태그, 데모 end-to-end 테스트
+scripts/demo/        docs/demo.gif 녹화 (Playwright로 웹 화면 조작, Pillow로 GIF 조립)
+tests/               비교 규칙, 각 태그, 데모 end-to-end, 웹 API 테스트
 ```
 
 데모 DB(`categories`, `products`, `customers`, `orders`, `order_items`)의 데이터는 모두

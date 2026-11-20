@@ -28,6 +28,9 @@ t2s-eval = "t2s_eval.cli:main"
 [tool.setuptools]
 packages = ["t2s_eval"]
 
+[tool.setuptools.package-data]
+t2s_eval = ["static/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

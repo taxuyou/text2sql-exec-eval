@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>text2sql-exec-eval</title>
+<style>
+  :root {
+    --fg: #1f2328; --muted: #6e7781; --line: #d0d7de; --soft: #f6f8fa;
+    --bad: #cf222e; --good: #1a7f37; --accent: #0969da;
+    --bad-tint: rgba(207, 34, 46, 0.10);
+    --sans: Pretendard, -apple-system, "Noto Sans KR", sans-serif;
+    --mono: "DejaVu Sans Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column;
+    background: #ffffff; color: var(--fg);
+    font: 16px/1.4 var(--sans);
+  }
+  header { padding: 12px 28px 11px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.3; }
+  header p { margin: 1px 0 0; color: var(--muted); }
+
+  main {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 24px;
+    padding: 16px 28px 18px;
+  }
+  .left, .right { display: flex; flex-direction: column; min-height: 0; }
+  .left { gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+  .field.grow { flex: 1; }
+  label { color: var(--muted); }
+  select, textarea {
+    width: 100%; font: inherit; color: var(--fg); background: #ffffff;
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  select { padding: 7px 10px; }
+  textarea { padding: 7px 10px; resize: none; }
+  textarea.sql { flex: 1; min-height: 0; font-family: var(--mono); line-height: 1.38; }
+  select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  textarea::selection { background: rgba(9, 105, 218, 0.22); }
+  button {
+    font: inherit; font-weight: 600; color: #ffffff; background: var(--accent);
+    border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer;
+  }
+  button:hover { filter: brightness(0.92); }
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  .hint { color: var(--muted); margin: 6px 0 0; }
+  #summary { display: flex; flex-direction: column; gap: 5px; }
+  .verdict-line { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+  .verdict { font-size: 24px; font-weight: 700; line-height: 1.25; }
+  .msg { color: var(--muted); }
+  .checks { font-size: 20px; display: flex; flex-wrap: wrap; column-gap: 28px; }
+  .checks b { font-weight: 700; }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+  .tags { margin: 2px 0 0; padding: 0; list-style: none; }
+  .tags li { margin: 2px 0; }
+  .cat { font-family: var(--mono); font-weight: 700; margin-right: 6px; }
+  code { font-family: var(--mono); }
+
+  .tables {
+    flex: 1; min-height: 0; margin-top: 12px;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px;
+  }
+  .side { display: flex; flex-direction: column; min-height: 0; gap: 4px; }
+  .cap { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+  .cap .who { font-weight: 700; }
+  .cap .count { font-size: 20px; }
+  .cap .count b { font-weight: 700; }
+  .cap .diff { color: var(--bad); }
+  .scroll {
+    flex: 1; min-height: 0; overflow: auto;
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 2px 10px; text-align: left; white-space: nowrap; line-height: 20px; }
+  th {
+    position: sticky; top: 0; background: var(--soft);
+    font-family: var(--mono); font-weight: 400; color: var(--muted);
+    border-bottom: 1px solid var(--line); padding-top: 4px; padding-bottom: 4px;
+  }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.null { color: var(--muted); }
+  tr.only td { background: var(--bad-tint); }
+  .error { padding: 10px 12px; }
+  .error .kind { font-weight: 700; color: var(--bad); }
+  .error .text { font-family: var(--mono); color: var(--fg); margin-top: 4px; white-space: pre-wrap; }
+  .note { color: var(--muted); padding: 10px 12px; }
+  .stale { opacity: 0.45; }
+
+  @media (max-width: 820px) {
+    body { height: auto; }
+    main, .tables { grid-template-columns: minmax(0, 1fr); }
+    textarea.sql { min-height: 120px; }
+    .scroll { max-height: 420px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>text2sql-exec-eval</h1>
+  <p>Text-to-SQL 예측을 문자열이 아니라 SQL 실행 결과로 채점합니다.</p>
+</header>
+<main>
+  <section class="left">
+    <select id="pick" aria-label="데모 질문"></select>
+    <div class="field">
+      <label for="question">질문</label>
+      <textarea id="question" rows="2"></textarea>
+    </div>
+    <div class="field grow">
+      <label for="gold">gold SQL (정답)</label>
+      <textarea id="gold" class="sql" spellcheck="false"></textarea>
+    </div>
+    <div class="field grow">
+      <label for="pred">pred SQL (모델 예측)</label>
+      <textarea id="pred" class="sql" spellcheck="false"></textarea>
+    </div>
+    <button id="run" title="Ctrl+Enter">실행해서 채점</button>
+  </section>
+  <section class="right" id="out">
+    <p class="hint" id="hint">두 SQL을 데모 DB에서 실제로 실행하고, 결과 행이 같은지로 채점합니다.</p>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const pick = $("pick"), question = $("question"), gold = $("gold"), pred = $("pred");
+const runBtn = $("run"), out = $("out");
+let pairs = [];
+
+function el(tag, cls, children) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  for (const c of [].concat(children ?? [])) {
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+// The evaluator writes SQL snippets in reasons as `code`; show them in monospace.
+function withCode(text) {
+  return text.split("`").map((part, i) => (i % 2 ? el("code", "", part) : part));
+}
+
+function showHint() {
+  out.replaceChildren(el("p", "hint", "두 SQL을 데모 DB에서 실제로 실행하고, 결과 행이 같은지로 채점합니다."));
+}
+
+function load(id) {
+  const p = pairs.find((x) => x.id === id) || pairs[0];
+  if (!p) return;
+  pick.value = p.id;
+  question.value = p.question;
+  gold.value = p.gold_sql;
+  pred.value = p.pred_sql;
+  history.replaceState(null, "", "#" + p.id);
+  showHint();
+}
+
+const OUTCOME = {
+  correct: ["같음", "good"],
+  result_mismatch: ["다름", "bad"],
+  syntax_error: ["pred 실행 실패", "bad"],
+  runtime_error: ["pred 실행 실패", "bad"],
+  timeout: ["pred 시간 초과", "bad"],
+  gold_error: ["gold 실행 실패", "bad"],
+};
+
+function summary(r) {
+  const ok = r.verdict === "correct";
+  const [outcome, cls] = OUTCOME[r.verdict] || [r.verdict, "bad"];
+  const box = el("div", "", []);
+  box.id = "summary";
+  box.append(
+    el("div", "verdict-line", [
+      el("span", "verdict " + (ok ? "good" : "bad"), r.verdict),
+      el("span", "msg", r.message),
+    ]),
+    el("div", "checks", [
+      el("span", "", ["실행 결과: ", el("b", cls, outcome)]),
+      el("span", "", ["문자열 비교: ", el("b", "", r.exact_match ? "같음" : "다름")]),
+    ]),
+  );
+  if (r.tags.length) {
+    box.append(el("ul", "tags", r.tags.map((t) =>
+      el("li", "", [el("span", "cat", t.category), ...withCode(t.reason)]))));
+  }
+  return box;
+}
+
+function table(side) {
+  const first = side.rows[0] || [];
+  const head = el("tr", "", side.names.map((n, i) => el("th", typeof first[i] === "number" ? "num" : "", n)));
+  const body = side.rows.map((row, i) => el("tr", side.only[i] ? "only" : "", row.map((v) => {
+    if (v === null) return el("td", "null", "NULL");
+    return el("td", typeof v === "number" ? "num" : "", v);
+  })));
+  return el("table", "", [el("thead", "", head), el("tbody", "", body)]);
+}
+
+function panel(name, side, otherName) {
+  const cap = el("div", "cap", [el("span", "who", name + " 결과")]);
+  const scroll = el("div", "scroll", []);
+  if (side.status === "ok") {
+    cap.append(el("span", "count", [el("b", "", side.row_count), "행"]));
+    if (side.only_count) cap.append(el("span", "diff", otherName + "에 없는 행 " + side.only_count));
+    scroll.append(table(side));
+    if (side.truncated) scroll.append(el("div", "note", "처음 " + side.rows.length + "행만 표시"));
+  } else if (side.status === "error") {
+    scroll.append(el("div", "error", [el("div", "kind", side.error), el("div", "text", side.message)]));
+  } else {
+    scroll.append(el("div", "note", "실행하지 않음 (gold SQL 실패)"));
+  }
+  return el("div", "side", [cap, scroll]);
+}
+
+// Scroll a result table so its highlighted rows are in view (all of them if they fit),
+// starting the view at a row boundary.
+function reveal(scroll) {
+  const flagged = scroll.querySelectorAll("tr.only");
+  if (!flagged.length) return;
+  const rows = [...scroll.querySelectorAll("tbody tr")];
+  const origin = scroll.getBoundingClientRect().top - scroll.scrollTop;
+  const head = scroll.querySelector("thead").getBoundingClientRect().height;
+  const offset = (row) => row.getBoundingClientRect().top - origin - head;  // scrollTop that puts row first
+  const last = flagged[flagged.length - 1].getBoundingClientRect();
+  const need = last.bottom - origin - scroll.clientHeight;  // smallest scrollTop showing the last one
+  const first = rows.indexOf(flagged[0]);
+  let start = 0;
+  while (start < first && offset(rows[start]) < need) start++;
+  if (offset(rows[start]) < need) start = Math.max(0, first - 1);  // too many: lead with the first
+  scroll.scrollTop = start ? offset(rows[start]) : 0;
+}
+
+function render(r) {
+  const tables = el("div", "tables", [panel("gold", r.gold, "pred"), panel("pred", r.pred, "gold")]);
+  out.replaceChildren(summary(r), tables);
+  tables.querySelectorAll(".scroll").forEach(reveal);
+}
+
+async function run() {
+  runBtn.disabled = true;
+  try {
+    const res = await fetch("/api/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: question.value, gold_sql: gold.value, pred_sql: pred.value }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || res.statusText);
+    render(body);
+  } catch (e) {
+    out.replaceChildren(el("p", "hint bad", "요청 실패: " + e.message));
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+runBtn.addEventListener("click", run);
+pick.addEventListener("change", () => load(pick.value));
+window.addEventListener("hashchange", () => load(decodeURIComponent(location.hash.slice(1))));
+for (const t of [question, gold, pred]) {
+  t.addEventListener("input", () => out.querySelectorAll("#summary, .tables").forEach((n) => n.classList.add("stale")));
+  t.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); });
+}
+
+fetch("/api/pairs").then((r) => r.json()).then((list) => {
+  pairs = list;
+  if (!pairs.length) { pick.hidden = true; return; }
+  pick.replaceChildren(...pairs.map((p) => {
+    const q = p.question.length > 15 ? p.question.slice(0, 14) + "…" : p.question;
+    const o = el("option", "", p.id + "  " + q);
+    o.value = p.id;
+    o.title = p.question;
+    return o;
+  }));
+  load(decodeURIComponent(location.hash.slice(1)));
+});
+</script>
+</body>
+</html>

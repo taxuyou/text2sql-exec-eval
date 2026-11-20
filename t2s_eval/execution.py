@@ -55,6 +55,7 @@ class ExecResult:
     error: Verdict | None = None  # SYNTAX_ERROR, RUNTIME_ERROR or TIMEOUT
     message: str = ""
     seconds: float = 0.0
+    names: list[str] = field(default_factory=list)  # column names, for display only
 
     @property
     def ok(self) -> bool:
@@ -127,7 +128,7 @@ class SQLiteExecutor:
         try:
             cursor = self.conn.execute(sql)
             rows = cursor.fetchall()
-            columns = len(cursor.description) if cursor.description else 0
+            names = [d[0] for d in cursor.description or ()]
         except sqlite3.Error as e:  # OperationalError, ProgrammingError, ...
             elapsed = time.monotonic() - start
             if timed_out:
@@ -143,7 +144,9 @@ class SQLiteExecutor:
             return ExecResult(error=kind, message=msg, seconds=elapsed)
         finally:
             self.conn.set_progress_handler(None, 0)
-        return ExecResult(rows=rows, columns=columns, seconds=time.monotonic() - start)
+        return ExecResult(
+            rows=rows, columns=len(names), seconds=time.monotonic() - start, names=names
+        )
 
 
 def has_top_level_order_by(sql: str) -> bool:
@@ -213,6 +216,27 @@ def _row_diff(
     else:
         g, p = Counter(_norm_rows(gold)), Counter(_norm_rows(pred))
     return list((g - p).elements()), list((p - g).elements())
+
+
+def mark_rows(rows: list[tuple], only: list[tuple], *, mode: str = "strict") -> list[bool]:
+    """Flag which of *rows* are the unmatched rows listed in *only*.
+
+    *only* is ``Comparison.only_in_gold`` (for the gold rows) or
+    ``only_in_pred`` (for the pred rows); rows are matched under the same rule
+    as the verdict. In strict mode duplicates count, so if gold has a row three
+    times and pred twice, one copy (the first) is flagged; in bird mode every
+    copy of an unmatched row is flagged.
+    """
+    if mode == "bird":
+        unmatched = set(only)
+        return [row in unmatched for row in rows]
+    left = Counter(only)
+    flags = []
+    for row in _norm_rows(rows):
+        flags.append(left[row] > 0)
+        if flags[-1]:
+            left[row] -= 1
+    return flags
 
 
 def _plural(n: int, word: str = "row") -> str:
