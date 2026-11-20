@@ -46,6 +46,19 @@ def test_float_noise_is_tolerated_but_real_differences_are_not():
     assert not rows_equal([(0.3,)], [(0.31,)], ordered=False)
 
 
+def test_bird_mode_compares_raw_floats():
+    # Rounding is a strict-mode convenience; BIRD compares the raw row sets.
+    assert rows_equal([(1.0000001,)], [(1.0000002,)], ordered=False)
+    assert not rows_equal([(1.0000001,)], [(1.0000002,)], ordered=False, mode="bird")
+
+
+def test_strict_mode_checks_column_count():
+    assert not rows_equal([], [], ordered=False, columns=(1, 2))
+    assert rows_equal([], [], ordered=False, columns=(2, 2))
+    # BIRD's rule only looks at the row sets.
+    assert rows_equal([], [], ordered=False, mode="bird", columns=(1, 2))
+
+
 def test_null_values_compare_equal():
     assert rows_equal([(None, 1)], [(None, 1)], ordered=False)
 
@@ -121,6 +134,30 @@ def test_duplicate_rows_distinguish_distinct(ex):
     bird = compare(ex, "SELECT grp FROM t", "SELECT DISTINCT grp FROM t", mode="bird")
     assert strict.verdict is Verdict.RESULT_MISMATCH
     assert bird.verdict is Verdict.CORRECT
+
+
+def test_float_rounding_applies_to_strict_mode_only(ex):
+    gold, pred = "SELECT 1.0000001", "SELECT 1.0000002"
+    assert compare(ex, gold, pred).verdict is Verdict.CORRECT
+    bird = compare(ex, gold, pred, mode="bird")
+    assert bird.verdict is Verdict.RESULT_MISMATCH
+    # The diff uses the same (unrounded) rule as the verdict.
+    assert bird.only_in_gold == [(1.0000001,)]
+    assert bird.only_in_pred == [(1.0000002,)]
+
+
+def test_empty_results_with_different_column_counts(ex):
+    gold, pred = "SELECT 1 WHERE 0", "SELECT 1, 2 WHERE 0"
+    strict = compare(ex, gold, pred)
+    assert strict.verdict is Verdict.RESULT_MISMATCH
+    assert "1 column" in strict.message and "2 columns" in strict.message
+    assert compare(ex, gold, "SELECT 3 WHERE 0").verdict is Verdict.CORRECT
+    assert compare(ex, gold, pred, mode="bird").verdict is Verdict.CORRECT
+
+
+def test_executor_reports_column_count_for_empty_results(ex):
+    result = ex.run("SELECT id, grp FROM t WHERE 0")
+    assert result.rows == [] and result.columns == 2
 
 
 def test_mismatch_reports_row_diff(ex):

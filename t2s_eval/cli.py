@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=MODES,
         default="strict",
         help="strict: multiset, ordered if gold has ORDER BY (default); "
-        "bird: set comparison like the official BIRD script",
+        "bird: BIRD's row-set rule, set(pred_rows) == set(gold_rows) on raw rows",
     )
     return p
 

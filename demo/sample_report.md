@@ -2,7 +2,7 @@
 
 - Pairs: `demo/pairs.jsonl` (14)
 - Database: `demo/shop.sqlite`
-- Comparison mode: `strict` (multiset of rows; ordered comparison when gold has a top-level ORDER BY)
+- Comparison mode: `strict` (multiset of rows, same column count, floats rounded to 6 decimals; ordered when gold has a top-level ORDER BY)
 - **Execution accuracy (EX): 4/14 = 28.6%**
 - Exact string match, for contrast: 0/14 = 0.0%
 
@@ -16,9 +16,9 @@
 | `runtime_error` | 1 |
 | `timeout` | 0 |
 
-## Mismatch causes
+## Clause tags
 
-Counted over `result_mismatch` pairs; one pair can have several tags.
+Counted over `result_mismatch` pairs; one pair can have several tags. A tag names a clause that differs from gold and may explain the result difference.
 
 | Tag | Count | Meaning |
 |---|---:|---|
@@ -26,7 +26,7 @@ Counted over `result_mismatch` pairs; one pair can have several tags.
 | `where` | 2 | filter predicates in WHERE or HAVING differ |
 | `group_by` | 1 | GROUP BY keys differ |
 | `aggregation` | 1 | aggregate function or its argument differs |
-| `order_limit` | 2 | ORDER BY keys/direction or LIMIT/OFFSET differ |
+| `order_limit` | 2 | ORDER BY keys, direction or NULL ordering, or LIMIT/OFFSET differ |
 | `select_columns` | 1 | returned columns, their order, or DISTINCT differ |
 | `other` | 0 | no clause-level difference found (values, subqueries, CTEs, ...) |
 

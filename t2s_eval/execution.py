@@ -6,10 +6,12 @@ Comparison rule (``mode="strict"``, the default):
 * If the *gold* query has a top-level ``ORDER BY``, rows are compared as an
   **ordered list** instead, because the question then asks for an order.
 * Rows are tuples, so the column order of the SELECT list matters (as in BIRD).
+* The number of result columns must match, even when both results are empty.
 * Floats are rounded to ``FLOAT_DIGITS`` decimals to absorb summation noise.
 
-``mode="bird"`` reproduces the official BIRD EX check, ``set(pred) == set(gold)``:
-order and duplicates are ignored even when the gold query has ``ORDER BY``.
+``mode="bird"`` reproduces BIRD's row-set rule, ``set(pred_rows) == set(gold_rows)``
+on the raw rows: no float rounding, no column-count check, and order and
+duplicates are ignored even when the gold query has ``ORDER BY``.
 """
 
 from __future__ import annotations
@@ -49,6 +51,7 @@ class ExecResult:
     """Outcome of running one SQL statement."""
 
     rows: list[tuple] | None = None
+    columns: int | None = None  # from cursor.description, so known for empty results too
     error: Verdict | None = None  # SYNTAX_ERROR, RUNTIME_ERROR or TIMEOUT
     message: str = ""
     seconds: float = 0.0
@@ -122,7 +125,9 @@ class SQLiteExecutor:
         start = time.monotonic()
         self.conn.set_progress_handler(on_progress, 1000)
         try:
-            rows = self.conn.execute(sql).fetchall()
+            cursor = self.conn.execute(sql)
+            rows = cursor.fetchall()
+            columns = len(cursor.description) if cursor.description else 0
         except sqlite3.Error as e:  # OperationalError, ProgrammingError, ...
             elapsed = time.monotonic() - start
             if timed_out:
@@ -138,7 +143,7 @@ class SQLiteExecutor:
             return ExecResult(error=kind, message=msg, seconds=elapsed)
         finally:
             self.conn.set_progress_handler(None, 0)
-        return ExecResult(rows=rows, seconds=time.monotonic() - start)
+        return ExecResult(rows=rows, columns=columns, seconds=time.monotonic() - start)
 
 
 def has_top_level_order_by(sql: str) -> bool:
@@ -174,13 +179,26 @@ def _norm_rows(rows: list[tuple]) -> list[tuple]:
     return [tuple(_norm_value(v) for v in row) for row in rows]
 
 
-def rows_equal(gold: list[tuple], pred: list[tuple], *, ordered: bool, mode: str = "strict") -> bool:
-    """Apply the comparison rule described in the module docstring."""
-    g, p = _norm_rows(gold), _norm_rows(pred)
+def rows_equal(
+    gold: list[tuple],
+    pred: list[tuple],
+    *,
+    ordered: bool,
+    mode: str = "strict",
+    columns: tuple[int | None, int | None] | None = None,
+) -> bool:
+    """Apply the comparison rule described in the module docstring.
+
+    *columns* is ``(gold_column_count, pred_column_count)``; strict mode uses it
+    so that two empty results with different shapes are not judged equal.
+    """
     if mode == "bird":
-        return set(g) == set(p)
+        return set(gold) == set(pred)  # raw rows, exactly like BIRD
     if mode != "strict":
         raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
+    if columns is not None and None not in columns and columns[0] != columns[1]:
+        return False
+    g, p = _norm_rows(gold), _norm_rows(pred)
     if ordered:
         return g == p
     return Counter(g) == Counter(p)
@@ -189,9 +207,11 @@ def rows_equal(gold: list[tuple], pred: list[tuple], *, ordered: bool, mode: str
 def _row_diff(
     gold: list[tuple], pred: list[tuple], mode: str
 ) -> tuple[list[tuple], list[tuple]]:
-    g, p = Counter(_norm_rows(gold)), Counter(_norm_rows(pred))
-    if mode == "bird":  # duplicates do not count
-        g, p = Counter(set(g)), Counter(set(p))
+    """Rows only in gold / only in pred, under the same rule as the verdict."""
+    if mode == "bird":  # raw rows, duplicates do not count
+        g, p = Counter(set(gold)), Counter(set(pred))
+    else:
+        g, p = Counter(_norm_rows(gold)), Counter(_norm_rows(pred))
     return list((g - p).elements()), list((p - g).elements())
 
 
@@ -215,21 +235,20 @@ def compare(
 
     ordered = mode == "strict" and has_top_level_order_by(gold_sql)
     assert gold.rows is not None and pred.rows is not None
-    if rows_equal(gold.rows, pred.rows, ordered=ordered, mode=mode):
+    columns = (gold.columns, pred.columns)
+    if rows_equal(gold.rows, pred.rows, ordered=ordered, mode=mode, columns=columns):
         return Comparison(
             Verdict.CORRECT, f"same result ({_plural(len(gold.rows))})", gold, pred, ordered
         )
 
     only_gold, only_pred = _row_diff(gold.rows, pred.rows, mode)
-    g_cols = len(gold.rows[0]) if gold.rows else None
-    p_cols = len(pred.rows[0]) if pred.rows else None
-    if not only_gold and not only_pred:
-        msg = f"same {_plural(len(gold.rows))} in a different order (gold has ORDER BY)"
-    elif g_cols is not None and p_cols is not None and g_cols != p_cols:
+    if None not in columns and gold.columns != pred.columns:
         msg = (
-            f"gold {_plural(len(gold.rows))} × {_plural(g_cols, 'column')}, "
-            f"pred {_plural(len(pred.rows))} × {_plural(p_cols, 'column')}"
+            f"gold {_plural(len(gold.rows))} × {_plural(gold.columns, 'column')}, "
+            f"pred {_plural(len(pred.rows))} × {_plural(pred.columns, 'column')}"
         )
+    elif not only_gold and not only_pred:
+        msg = f"same {_plural(len(gold.rows))} in a different order (gold has ORDER BY)"
     else:
         msg = (
             f"gold {_plural(len(gold.rows))}, pred {_plural(len(pred.rows))}; "

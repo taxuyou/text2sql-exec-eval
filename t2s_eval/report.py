@@ -7,8 +7,9 @@ from .execution import Verdict
 from .taxonomy import CATEGORY_HELP
 
 MODE_HELP = {
-    "strict": "multiset of rows; ordered comparison when gold has a top-level ORDER BY",
-    "bird": "set of rows, order ignored (official BIRD EX rule)",
+    "strict": "multiset of rows, same column count, floats rounded to 6 decimals; "
+    "ordered when gold has a top-level ORDER BY",
+    "bird": "BIRD's row-set rule: set(pred_rows) == set(gold_rows) on raw rows",
 }
 
 
@@ -40,7 +41,7 @@ def render_console(results: list[PairResult], s: Summary, *, mode: str) -> str:
     ]
     lines += [f"  {v.value:<17}{n:>3}" for v, n in s.verdicts.items()]
     n_mismatch = s.verdicts[Verdict.RESULT_MISMATCH]
-    lines += ["", f"Mismatch causes ({n_mismatch} result_mismatch pairs; a pair can have several)"]
+    lines += ["", f"Clause tags ({n_mismatch} result_mismatch pairs; a pair can have several)"]
     lines += [f"  {cat:<17}{n:>3}" for cat, n in s.tags.items()]
     lines += ["", "Per pair"]
     width = max((len(r.pair.id) for r in results), default=2)
@@ -77,9 +78,10 @@ def render_markdown(
     out += [f"| `{v.value}` | {n} |" for v, n in s.verdicts.items()]
     out += [
         "",
-        "## Mismatch causes",
+        "## Clause tags",
         "",
-        "Counted over `result_mismatch` pairs; one pair can have several tags.",
+        "Counted over `result_mismatch` pairs; one pair can have several tags. A tag names a "
+        "clause that differs from gold and may explain the result difference.",
         "",
         "| Tag | Count | Meaning |",
         "|---|---:|---|",

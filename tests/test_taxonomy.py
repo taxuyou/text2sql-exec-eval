@@ -203,6 +203,24 @@ def test_missing_order_by():
     assert "no ORDER BY" in t["order_limit"]
 
 
+def test_null_ordering_differs():
+    t = tags(
+        "SELECT order_id FROM orders ORDER BY order_date DESC NULLS FIRST LIMIT 5",
+        "SELECT order_id FROM orders ORDER BY order_date DESC LIMIT 5",
+    )
+    assert set(t) == {"order_limit"}
+    assert "NULL ordering" in t["order_limit"] and "NULLS FIRST" in t["order_limit"]
+
+
+def test_default_null_ordering_written_explicitly_is_not_a_difference():
+    # SQLite puts NULLs first for ASC, so `x NULLS FIRST` == `x`.
+    t = tags(
+        "SELECT order_id FROM orders WHERE status = 'shipped' ORDER BY order_date NULLS FIRST LIMIT 5",
+        "SELECT order_id FROM orders WHERE status = 'pending' ORDER BY order_date LIMIT 5",
+    )
+    assert set(t) == {"where"}
+
+
 def test_extra_order_by_without_limit_is_not_blamed():
     # Gold has no ORDER BY, so rows are compared unordered: pred's ORDER BY is harmless.
     t = tags("SELECT name FROM products WHERE price > 50000", "SELECT name FROM products ORDER BY name")

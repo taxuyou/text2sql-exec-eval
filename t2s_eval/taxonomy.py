@@ -1,4 +1,4 @@
-"""Explain *why* a predicted query returns a different result than the gold query.
+"""Tag the clauses where a predicted query differs from the gold query.
 
 Both queries are parsed with sqlglot and reduced to a :class:`QueryShape`, a
 normalised, clause-by-clause view of the outermost SELECT:
@@ -42,7 +42,7 @@ CATEGORY_HELP = {
     "where": "filter predicates in WHERE or HAVING differ",
     "group_by": "GROUP BY keys differ",
     "aggregation": "aggregate function or its argument differs",
-    "order_limit": "ORDER BY keys/direction or LIMIT/OFFSET differ",
+    "order_limit": "ORDER BY keys, direction or NULL ordering, or LIMIT/OFFSET differ",
     "select_columns": "returned columns, their order, or DISTINCT differ",
     "other": "no clause-level difference found (values, subqueries, CTEs, ...)",
 }
@@ -73,7 +73,8 @@ class QueryShape:
     column_is_aggregate: list[bool] = field(default_factory=list)
     aggregates: Counter = field(default_factory=Counter)
     distinct: bool = False
-    order_by: list[tuple[str, str]] = field(default_factory=list)  # (key, ASC|DESC)
+    # (key, direction): direction is ASC/DESC plus a non-default NULLS FIRST/LAST
+    order_by: list[tuple[str, str]] = field(default_factory=list)
     limit: str | None = None
     offset: str | None = None
     ctes: str | None = None
@@ -315,7 +316,14 @@ def shape_of(sql: str, schema: dict[str, list[str]] | None = None) -> QueryShape
         key = _canon(deref(ordered.this))
         if key in shape.columns:
             key = f"#{shape.columns.index(key) + 1}"
-        shape.order_by.append((key, "DESC" if ordered.args.get("desc") else "ASC"))
+        desc = bool(ordered.args.get("desc"))
+        direction = "DESC" if desc else "ASC"
+        # sqlglot records where NULLs go. SQLite puts them first for ASC and last
+        # for DESC; spell out only a non-default placement, so `x` == `x NULLS FIRST`.
+        nulls_first = ordered.args.get("nulls_first")
+        if nulls_first is not None and bool(nulls_first) == desc:
+            direction += " NULLS FIRST" if nulls_first else " NULLS LAST"
+        shape.order_by.append((key, direction))
     limit = tree.args.get("limit")
     if limit is not None:
         shape.limit = _sql(limit.expression)
@@ -424,7 +432,8 @@ def _diff_order_limit(g: QueryShape, p: QueryShape) -> list[str]:
             for (key, gd), (_, pd) in zip(g.order_by, p.order_by):
                 if gd != pd:
                     shown = _order_text(g, key, "").rstrip()
-                    reasons.append(f"sort direction on {shown}: gold {gd}, pred {pd}")
+                    what = "sort direction" if gd.split()[0] != pd.split()[0] else "NULL ordering"
+                    reasons.append(f"{what} on {shown}: gold {gd}, pred {pd}")
         else:
             reasons.append(
                 "sort keys differ: gold "
