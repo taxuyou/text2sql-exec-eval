@@ -1,7 +1,5 @@
 # text2sql-exec-eval
 
-[![test](https://github.com/taxuyou/text2sql-exec-eval/actions/workflows/test.yml/badge.svg)](https://github.com/taxuyou/text2sql-exec-eval/actions/workflows/test.yml)
-
 > **English summary.** A small, self-contained example of evaluating Text-to-SQL
 > by *executing* SQL instead of comparing strings, as BIRD's Execution Accuracy
 > (EX) does. Gold and predicted SQL run on SQLite with a timeout; result sets are
