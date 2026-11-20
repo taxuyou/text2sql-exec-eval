@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "t2s-eval"
+version = "0.1.0"
+description = "Execution-based Text-to-SQL evaluation (EX) with an explainable error taxonomy"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Taeksu Kim" }]
+keywords = ["text-to-sql", "nl2sql", "evaluation", "execution-accuracy", "sqlite", "bird"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["sqlglot==30.33.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+t2s-eval = "t2s_eval.cli:main"
+
+[tool.setuptools]
+packages = ["t2s_eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

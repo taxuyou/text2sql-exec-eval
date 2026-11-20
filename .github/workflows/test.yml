@@ -1,0 +1,23 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[test]"
+      - run: python -m pytest -q
+      - name: Demo run
+        run: |
+          python demo/build_shop_db.py
+          python -m t2s_eval --db demo/shop.sqlite --pairs demo/pairs.jsonl --out report.md
