@@ -4,6 +4,8 @@ Text-to-SQL 예측을 문자열이 아니라 SQL 실행 결과로 채점하고, 
 
 English: execution-based Text-to-SQL evaluation on SQLite (BIRD-style EX); for wrong results, a sqlglot clause diff tags which clauses differ from the gold query.
 
+![웹 화면: q09의 gold와 pred를 실행해서 채점하면 gold 26행, pred 25행으로 결과가 달라 result_mismatch와 group_by 태그가 뜨고, pred의 GROUP BY를 고객 ID로 고치면 correct로 바뀌는 모습](docs/demo.gif)
+
 ## 예: 한 단어 차이, 다른 결과
 
 데모 `q09` "고객별 주문 건수를 고객 이름과 함께 보여 주세요."
